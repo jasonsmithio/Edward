@@ -7,20 +7,20 @@ import Foundation
 import Security
 
 enum MenuBarItemService {
-    static let name = "com.jordanbaird.Ice.MenuBarItemService"
+    static let name = "io.jasonsmith.Edward.MenuBarItemService"
 
     /// Returns the Team Identifier of the currently running process, or
     /// `nil` if the binary is unsigned, ad-hoc signed, or the team
     /// identifier cannot be read.
     ///
-    /// Both sides of the XPC connection (Ice ↔ MenuBarItemService.xpc) use
+    /// Both sides of the XPC connection (Edward ↔ MenuBarItemService.xpc) use
     /// this to decide whether to enforce `.isFromSameTeam()` on their
     /// peer requirements. The `.isFromSameTeam()` predicate silently
     /// rejects every peer when there's no team identifier to compare —
     /// the case for any ad-hoc-signed build, including every community
     /// fork shipped without an Apple Developer Program account. Without
-    /// the guard, Ice rejects its own helper service, the helper
-    /// rejects Ice back, and the Menu Bar Layout settings pane spins
+    /// the guard, Edward rejects its own helper service, the helper
+    /// rejects Edward back, and the Menu Bar Layout settings pane spins
     /// forever on "Loading menu bar items…". This is the same class as
     /// upstream issues #744 and #891.
     static func ownTeamIdentifier() -> String? {
