@@ -1,5 +1,5 @@
 included:
-  - Ice
+  - Edward
 
 disabled_rules:
   - cyclomatic_complexity
@@ -56,7 +56,7 @@ file_header:
   required_pattern: |-
     //
     //  SWIFTLINT_CURRENT_FILENAME
-    //  Ice
+    //  Edward
     //
 
 modifier_order:
