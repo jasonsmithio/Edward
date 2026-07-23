@@ -1,3 +1,5 @@
 .DS_Store
 build/
 xcuserdata/
+site/public/releases/
+site/public/appcast.xml

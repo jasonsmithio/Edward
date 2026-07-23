@@ -5,6 +5,9 @@
     "cleanUrls": true,
     "trailingSlash": false,
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "redirects": [
+      { "source": "/download", "destination": "/releases/Edward-1.0.0.zip", "type": 302 }
+    ],
     "headers": [
       {
         "source": "**/*.@(png|jpg|jpeg|gif|webp|svg|ico|woff2)",

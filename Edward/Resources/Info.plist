@@ -2,12 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Edward is a personal fork of Ice. Placeholder auto-update feed; point it
-	     at your own appcast (with your own SUPublicEDKey) if you want signed
-	     updates. Auto-checks are off so Edward never tries to update into Ice. -->
+	<!-- Edward is a personal fork of Ice. Signed Sparkle updates are served from
+	     theedward.app. If you fork Edward, replace SUFeedURL and SUPublicEDKey
+	     with your own so your build never updates into someone else's binary. -->
 	<key>SUFeedURL</key>
-	<string>https://jasonsmith.io/edward-releases/appcast.xml</string>
+	<string>https://theedward.app/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>cJmakrF3vQK4AGVxsmD7sZSd2SSH0PtCsxnxMdeOr90=</string>
 	<key>SUEnableAutomaticChecks</key>
-	<false/>
+	<true/>
 </dict>
 </plist>
