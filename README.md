@@ -10,12 +10,15 @@ Edward is a personal fork of [Ice](https://github.com/jordanbaird/Ice) by Jordan
 rebranded and customized for my own use. All credit for the original work goes to Jordan
 and Ice's contributors. Like Ice, Edward is released under the GPL-3.0 license.
 
-> [!NOTE]
-> Edward is built from source and is based on Ice's `macos-26` branch, so it works on
-> macOS 26 (Tahoe). Open `Edward.xcodeproj` in Xcode, select your own development team
-> under **Signing & Capabilities** for both the `Edward` and `MenuBarItemService`
-> targets, and build the `Edward` scheme. It installs alongside Ice with its own bundle
-> identifier (`io.jasonsmith.Edward`), so your existing Ice settings are untouched.
+> [!TIP]
+> **You don't need to build Edward yourself.** Download the notarized app from
+> **[theedward.app](https://theedward.app)** ([direct link](https://theedward.app/download)),
+> unzip, and drag `Edward.app` to Applications. It updates itself via Sparkle.
+> Building from source remains fully supported — see [Build](#build-from-source) below.
+
+Edward is based on Ice's `macos-26` branch, so it works on macOS 26 (Tahoe). It installs
+alongside Ice with its own bundle identifier (`io.jasonsmith.Edward`), so existing Ice
+settings are untouched.
 
 ## Why this fork exists
 
@@ -26,11 +29,24 @@ layout pane shows up empty and items can't be displayed. The fixes live on Ice's
 to **ad-hoc / personally-signed builds** — without it, a self-built copy silently rejects
 its own helper and the layout pane spins forever.
 
-## Build
+## Install
+
+Download the latest notarized release from **[theedward.app](https://theedward.app)**,
+unzip, and drag `Edward.app` to Applications. Updates arrive automatically via Sparkle
+(feed: `https://theedward.app/appcast.xml`).
+
+## Build from source
+
+Building it yourself is entirely optional:
 
 1. Open `Edward.xcodeproj` in Xcode.
-2. For both the `Edward` and `MenuBarItemService` targets → **Signing & Capabilities** → choose your Team.
+2. For both the `Edward` and `MenuBarItemService` targets → **Signing & Capabilities** → choose your Team
+   (or build unsigned: `xcodebuild -scheme Edward CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="-" build` —
+   ad-hoc builds work thanks to the XPC patch).
 3. Build & run the `Edward` scheme (⌘R). The app lives in the menu bar.
+
+If you fork Edward and distribute your own builds, replace `SUFeedURL` and `SUPublicEDKey`
+in `Edward/Resources/Info.plist` with your own so your users never update into my binary.
 
 ## Architecture note
 
