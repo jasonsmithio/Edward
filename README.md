@@ -70,6 +70,22 @@ and helper agree on a shared mach-service name defined in
 
 macOS 14 (Sonoma) or later; the Tahoe fixes target macOS 26.
 
+## Privacy
+
+Edward is a local menu bar utility. It contains **no analytics, telemetry, or crash
+reporting**, and collects nothing about you, your menu bar, or your Mac.
+
+The app makes exactly one kind of outbound connection: its **Sparkle software-update
+check**, which contacts **`theedward.app`** only — the update feed
+(`https://theedward.app/appcast.xml`) and, if you accept an update, the release archive.
+No information about you or your usage is transmitted.
+
+- The embedded `MenuBarItemService.xpc` helper does no networking whatsoever.
+- The only other URLs in the app are click-only browser links (this repo, Ice's donate
+  page); nothing is fetched unless you click.
+- Want zero outbound traffic? Disable automatic update checks in **Settings**. Since
+  Edward is open source (GPL-3.0), you can verify all of this yourself.
+
 ## Credit
 
 Edward is a fork of [Ice](https://github.com/jordanbaird/Ice). The original project, its
