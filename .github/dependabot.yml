@@ -1,0 +1,18 @@
+# Dependabot configuration.
+#
+# NOTE: Edward's Swift packages are managed inside the Xcode project
+# (Package.resolved), with no top-level Package.swift. Dependabot's "swift"
+# ecosystem requires a Package.swift manifest, so it is intentionally omitted
+# here — it would only error. Swift dependency *visibility* (Sparkle, AXSwift,
+# etc.) is instead handled by the dependency-submission workflow, which feeds
+# the dependency graph so Dependabot security alerts still cover them.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        update-types: ["minor", "patch"]

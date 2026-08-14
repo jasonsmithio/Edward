@@ -1,0 +1,74 @@
+name: SPM Dependency Submission
+
+# Edward's Swift packages live inside the Xcode project (Package.resolved) with
+# no top-level Package.swift, so GitHub's automatic dependency graph doesn't
+# detect them. This job parses Package.resolved and submits the packages to the
+# dependency graph, so Dependabot security alerts cover Sparkle, AXSwift, etc.
+#
+# Self-contained: jq + gh only, no third-party actions.
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "**/Package.resolved"
+      - ".github/workflows/dependency-graph.yml"
+  schedule:
+    - cron: "27 5 * * 1"   # Mondays 05:27 UTC (catches advisories on unchanged pins)
+  workflow_dispatch:
+
+permissions:
+  contents: write   # required to submit a dependency snapshot
+
+concurrency:
+  group: depgraph-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Build and submit dependency snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          RESOLVED="$(find . -path '*/xcshareddata/swiftpm/Package.resolved' | head -1)"
+          if [ -z "$RESOLVED" ]; then echo "No Package.resolved found"; exit 1; fi
+          echo "Using $RESOLVED"
+
+          jq -n \
+            --slurpfile pins <(jq '.pins' "$RESOLVED") \
+            --arg sha "$COMMIT_SHA" \
+            --arg ref "$REF" \
+            --arg scanned "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg runid "$RUN_ID" \
+            --arg path "$RESOLVED" '
+            def purl: "pkg:swift/" + (.location | sub("^https?://";"") | sub("\\.git$";""));
+            {
+              version: 0, sha: $sha, ref: $ref,
+              job: { correlator: "spm-dependency-submission", id: $runid },
+              detector: { name: "edward-package-resolved", version: "1.0.0",
+                          url: "https://github.com/jasonsmithio/Edward" },
+              scanned: $scanned,
+              manifests: { "Package.resolved": {
+                name: "Package.resolved",
+                file: { source_location: $path },
+                resolved: ( $pins[0] | map({
+                  key: (purl + "@" + (.state.version // .state.revision)),
+                  value: { package_url: (purl + "@" + (.state.version // .state.revision)),
+                           relationship: "direct", scope: "runtime" }
+                }) | from_entries )
+              } }
+            }' > snapshot.json
+
+          echo "Submitting $(jq '.manifests."Package.resolved".resolved | length' snapshot.json) packages"
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/dependency-graph/snapshots" \
+            --input snapshot.json
