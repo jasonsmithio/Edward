@@ -6,7 +6,7 @@
     "trailingSlash": false,
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "redirects": [
-      { "source": "/download", "destination": "/releases/Edward-1.0.0.zip", "type": 302 }
+      { "source": "/download", "destination": "/releases/Edward-1.0.1.zip", "type": 302 }
     ],
     "headers": [
       {
