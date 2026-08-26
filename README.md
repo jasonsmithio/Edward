@@ -32,8 +32,25 @@ its own helper and the layout pane spins forever.
 ## Install
 
 Download the latest notarized release from **[theedward.app](https://theedward.app)**,
-unzip, and drag `Edward.app` to Applications. Updates arrive automatically via Sparkle
-(feed: `https://theedward.app/appcast.xml`).
+unzip it by double-clicking in Finder, and drag `Edward.app` to Applications. Updates
+arrive automatically via Sparkle (feed: `https://theedward.app/appcast.xml`).
+
+### First launch on macOS
+
+Edward is signed with a Developer ID and notarized by Apple. Because it's distributed
+outside the Mac App Store, macOS (Sequoia and later) shows a one-time prompt the first
+time you open it — *"Apple could not verify Edward is free of malware."* This is expected
+for notarized non-App-Store apps. To open it:
+
+1. Try to open Edward once, then dismiss the prompt.
+2. Open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway**.
+3. Confirm. Edward opens and won't prompt again.
+
+> **Unzip with Finder.** Double-click the `.zip` (Apple's Archive Utility). Some
+> third-party unarchivers rewrite the app's embedded-framework symlinks as real files,
+> which breaks the code signature and causes a `rejected (unsealed contents present in
+> the root directory of an embedded framework)` error. If you hit that, re-download and
+> unzip with Finder.
 
 ## Build from source
 

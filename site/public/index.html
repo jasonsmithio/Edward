@@ -113,6 +113,10 @@
   code{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:13px;
     background:var(--teal-soft);color:var(--teal-deep);padding:2px 6px;border-radius:6px}
   .build .cta{margin-top:28px}
+  .firstrun{max-width:720px;margin:22px auto 0;padding:16px 18px;border-radius:13px;
+    background:var(--teal-soft);border:1px solid var(--border);color:var(--body);font-size:14.5px;line-height:1.6}
+  .firstrun strong{color:var(--ink)}
+  .firstrun-tip{display:inline-block;margin-top:8px;color:var(--muted);font-size:13.5px}
 
   /* fork strip */
   .fork{background:var(--teal);color:#fff}
@@ -214,10 +218,19 @@
     <p class="sub">Signed, notarized, and self-updating — no Xcode required. Edward installs alongside Ice with its own bundle id, so an existing Ice setup is untouched.</p>
     <div class="build">
       <ol class="steps">
-        <li><a href="/download"><b>Download Edward</b></a> and unzip it.</li>
+        <li><a href="/download"><b>Download Edward</b></a> and unzip it by double-clicking in Finder.</li>
         <li>Drag <b>Edward.app</b> into your <b>Applications</b> folder and open it.</li>
         <li>That's it — Edward lives in your menu bar and keeps itself up to date automatically.</li>
       </ol>
+      <div class="firstrun">
+        <strong>First launch:</strong> Edward is signed and notarized by Apple, but because
+        it's distributed outside the App Store, macOS shows a one-time prompt
+        (<em>"Apple could not verify Edward is free of malware"</em>) the first time you open it.
+        To get past it, open <b>System Settings → Privacy &amp; Security</b>, scroll down, and
+        click <b>Open Anyway</b>. You only do this once.
+        <br><span class="firstrun-tip">Tip: unzip with Finder (double-click) and don't use a third-party
+        unarchiver — some break the app's signature and cause a "damaged / unverified" error.</span>
+      </div>
       <div class="cta">
         <a class="btn btn-primary" href="/download">Download Edward</a>
         <a class="btn btn-ghost" href="https://github.com/jasonsmithio/Edward#build-from-source">Prefer to build from source?</a>
