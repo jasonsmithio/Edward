@@ -81,6 +81,20 @@ final class Concealer27 {
                 }
             }
             .store(in: &cancellables)
+        // Entering or leaving fullscreen swaps the menu bar the items are drawn in,
+        // but nothing else here observes the active space, so the concealment state
+        // was left as it was before the transition. `HIDEventManager` already watches
+        // `activeSpace` for the same reason on macOS 26 and earlier.
+        appState.$activeSpace
+            .map(\.isFullscreen)
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.update()
+                }
+            }
+            .store(in: &cancellables)
         update()
     }
 
