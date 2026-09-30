@@ -1,0 +1,202 @@
+# Himiko on GitHub Actions — copy to .github/workflows/himiko.yml.
+#
+# The same scan, with the same himiko.yaml, as ci/gitlab-ci.yml.
+#
+# No secret to add: the workflow fetches the private Himiko binary with the same
+# keyless identity it uploads with — GitHub's OIDC token, traded at Google's STS
+# for a short-lived token that may read the releases bucket. The WIF provider
+# only accepts repositories owned by `jasonsmithio`.
+#
+# If the default branch is not `main`, change `branches:` below to match.
+#
+# Triggers, and why (private repos bill Actions minutes):
+#   * push to the default branch  — the gate, and what feeds the board
+#   * weekly schedule             — a repo nobody pushes to still gets checked
+#                                   against new CVEs, and never goes stale
+#   * NOT also pull_request: running the same job on both doubles the cost of
+#     a tree that was already scanned. Prefer PRs? Swap `push` for
+#     `pull_request` — but don't keep both.
+# Docs are deliberately not path-ignored: secrets get pasted into Markdown.
+name: himiko
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 14 * * 1" # Mondays 14:17 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: himiko-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write # the keyless identity: fetches the binary, uploads the scan
+  security-events: write # SARIF → code scanning (public repos)
+
+env:
+  HIMIKO_VERSION: v0.3.0
+  # sha256 of himiko-linux-amd64 for that version; move it with HIMIKO_VERSION.
+  HIMIKO_SHA256: 04d8e05986ea9ce0a45654f621b4986f6e4b6126c45883e6c832c6d96cf02588
+  HIMIKO_TRIVY_VERSION: 0.74.0
+  HIMIKO_TRIVY_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
+  HIMIKO_UPLOAD: gs://jasonsmithio-himiko-findings
+  HIMIKO_WIF_AUDIENCE: //iam.googleapis.com/projects/327540699249/locations/global/workloadIdentityPools/himiko-ci/providers/github
+  HIMIKO_RELEASES: jasonsmithio-himiko-releases # private bucket, read via WIF
+  HIMIKO_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # Trivy's vulnerability DB. Restore and save are separate steps on purpose:
+      # the combined `actions/cache` only saves when the job SUCCEEDS, and a scan
+      # that fails its policy gate fails the job — so exactly the repos that run
+      # red for a while would re-download the DB on every run. The key is per
+      # day: one save a day at most, and Trivy refreshes a stale DB by itself.
+      - name: Cache key
+        id: day
+        run: echo "day=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Trivy DB
+        id: trivy-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .himiko-cache
+          key: himiko-trivy-${{ env.HIMIKO_TRIVY_VERSION }}-${{ steps.day.outputs.day }}
+          restore-keys: himiko-trivy-${{ env.HIMIKO_TRIVY_VERSION }}-
+
+      - name: Install Trivy and Himiko
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/himiko" && cd "$RUNNER_TEMP/himiko"
+          t="trivy_${HIMIKO_TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${HIMIKO_TRIVY_VERSION}/$t"
+          echo "${HIMIKO_TRIVY_SHA256}  $t" | sha256sum -c -
+          tar -xzf "$t" trivy
+          # Keyless fetch of a private binary: OIDC token → Google STS → bucket read.
+          oidc=$(curl -fsSG -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            --data-urlencode "audience=https:$HIMIKO_WIF_AUDIENCE" "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)
+          echo "::add-mask::$oidc"
+          gcs_token=$(jq -n --arg aud "$HIMIKO_WIF_AUDIENCE" --arg jwt "$oidc" '{
+              grantType: "urn:ietf:params:oauth:grant-type:token-exchange",
+              audience: $aud, scope: "https://www.googleapis.com/auth/cloud-platform",
+              requestedTokenType: "urn:ietf:params:oauth:token-type:access_token",
+              subjectToken: $jwt, subjectTokenType: "urn:ietf:params:oauth:token-type:jwt"}' \
+            | curl -fsS https://sts.googleapis.com/v1/token -H 'Content-Type: application/json' -d @- | jq -r '.access_token // empty')
+          test -n "$gcs_token" || { echo "himiko: token exchange failed — is this repo's owner allowed by the WIF provider?" >&2; exit 1; }
+          echo "::add-mask::$gcs_token"
+          curl -fsSL -H "Authorization: Bearer $gcs_token" -o himiko \
+            "https://storage.googleapis.com/storage/v1/b/$HIMIKO_RELEASES/o/himiko%2F$HIMIKO_VERSION%2Fhimiko-linux-amd64?alt=media"
+          if [ -n "$HIMIKO_SHA256" ]; then echo "$HIMIKO_SHA256  himiko" | sha256sum -c -; fi
+          chmod +x himiko trivy
+          echo "$RUNNER_TEMP/himiko" >> "$GITHUB_PATH"
+
+      - name: Scan
+        env:
+          HIMIKO_CACHE_DIR: ${{ github.workspace }}/.himiko-cache
+        run: himiko scan --sarif himiko.sarif --json himiko-scan.json .
+
+      # Saved even when the scan above failed the gate (but not when the run was
+      # cancelled, not when today's entry already exists, and not an empty dir).
+      - name: Save Trivy DB
+        if: ${{ !cancelled() && steps.trivy-cache.outputs.cache-hit != 'true' && hashFiles('.himiko-cache/**') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: .himiko-cache
+          key: ${{ steps.trivy-cache.outputs.cache-primary-key }}
+
+      # Code scanning is free on public repos only; on a private personal repo
+      # the upload is refused, and the Himiko board is where findings show.
+      - name: Upload SARIF
+        if: ${{ always() && !github.event.repository.private }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: himiko.sarif
+          category: himiko
+
+      - name: Keep the scan
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: himiko-scan
+          path: |
+            himiko-scan.json
+            himiko.sarif
+          retention-days: 30
+
+  # PREFER DEPENDABOT ON GITHUB. Dependabot security updates open these same pull
+  # requests with no workflow at all; this job only duplicates them. It is here,
+  # off, for a repo that cannot use Dependabot. (The GitLab template is where
+  # `himiko fix` earns its keep — GitLab Free has nothing like it.)
+  #
+  # Tier 1 patching — opt in with a repository variable HIMIKO_FIX=on
+  # (`gh variable set HIMIKO_FIX -b on`). Weekly or by hand, never on a push: it
+  # bumps vulnerable dependencies to the smallest fixed version on the same
+  # major, re-scans after each bump, keeps only those that cleared their finding
+  # without adding a new one, and opens ONE pull request from the rolling branch
+  # `himiko/security-bumps`, a commit per bump. It never merges, never crosses a
+  # major version, never touches secrets or IaC.
+  #
+  # One-time, in this repo: Settings → Actions → General → "Allow GitHub Actions
+  # to create and approve pull requests". By API:
+  #   gh api -X PUT repos/<owner>/<repo>/actions/permissions/workflow \
+  #     -f default_workflow_permissions=read -F can_approve_pull_request_reviews=true
+  fix:
+    if: ${{ github.event_name != 'push' && vars.HIMIKO_FIX == 'on' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # push the himiko/security-bumps branch
+      pull-requests: write # open or refresh the pull request
+      id-token: write # keyless fetch of the private binary
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore Trivy DB
+        uses: actions/cache/restore@v4
+        with:
+          path: .himiko-cache
+          key: himiko-trivy-${{ env.HIMIKO_TRIVY_VERSION }}-fix
+          restore-keys: himiko-trivy-${{ env.HIMIKO_TRIVY_VERSION }}-
+
+      - name: Install Trivy and Himiko
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/himiko" && cd "$RUNNER_TEMP/himiko"
+          t="trivy_${HIMIKO_TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${HIMIKO_TRIVY_VERSION}/$t"
+          echo "${HIMIKO_TRIVY_SHA256}  $t" | sha256sum -c -
+          tar -xzf "$t" trivy
+          # Keyless fetch of a private binary: OIDC token → Google STS → bucket read.
+          oidc=$(curl -fsSG -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            --data-urlencode "audience=https:$HIMIKO_WIF_AUDIENCE" "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)
+          echo "::add-mask::$oidc"
+          gcs_token=$(jq -n --arg aud "$HIMIKO_WIF_AUDIENCE" --arg jwt "$oidc" '{
+              grantType: "urn:ietf:params:oauth:grant-type:token-exchange",
+              audience: $aud, scope: "https://www.googleapis.com/auth/cloud-platform",
+              requestedTokenType: "urn:ietf:params:oauth:token-type:access_token",
+              subjectToken: $jwt, subjectTokenType: "urn:ietf:params:oauth:token-type:jwt"}' \
+            | curl -fsS https://sts.googleapis.com/v1/token -H 'Content-Type: application/json' -d @- | jq -r '.access_token // empty')
+          test -n "$gcs_token" || { echo "himiko: token exchange failed — is this repo's owner allowed by the WIF provider?" >&2; exit 1; }
+          echo "::add-mask::$gcs_token"
+          curl -fsSL -H "Authorization: Bearer $gcs_token" -o himiko \
+            "https://storage.googleapis.com/storage/v1/b/$HIMIKO_RELEASES/o/himiko%2F$HIMIKO_VERSION%2Fhimiko-linux-amd64?alt=media"
+          if [ -n "$HIMIKO_SHA256" ]; then echo "$HIMIKO_SHA256  himiko" | sha256sum -c -; fi
+          chmod +x himiko trivy
+          echo "$RUNNER_TEMP/himiko" >> "$GITHUB_PATH"
+
+      - name: uv, if this repo locks with it
+        run: if git ls-files | grep -qE '(^|/)uv\.lock$'; then pipx install uv; fi
+
+      - name: Fix
+        env:
+          HIMIKO_CACHE_DIR: ${{ github.workspace }}/.himiko-cache
+          GITHUB_TOKEN: ${{ github.token }}
+        run: himiko fix --push .
