@@ -16,7 +16,7 @@ import OSLog
 /// state of Ice's sections.
 @available(macOS 27.0, *)
 @MainActor
-final class Concealer27 {
+final class Concealer27: ObservableObject {
     private let controller = ConcealmentController27(backend: MenuBarAssessmentAssertion27())
     private let logger = Logger(category: "Concealer27")
     private weak var appState: AppState?
@@ -141,6 +141,53 @@ final class Concealer27 {
             await task.value
             try? await Task.sleep(for: .milliseconds(400))
             await self?.appState?.itemManager.cacheItemsIfNeeded()
+            await self?.checkStuckOverflow()
+        }
+    }
+
+    /// Whether the notched bar looks stuck with items folded away and no way to reach them.
+    ///
+    /// Settings shows this; nothing acts on it. The cure measured so far is to relaunch the
+    /// application whose item is missing, and which application that is cannot be told apart
+    /// from the frames Accessibility keeps for items it no longer draws.
+    @Published private(set) var isOverflowStuck = false
+
+    /// Notes whether concealment has left the notched bar's items folded with no overflow button.
+    ///
+    /// Seen twice on this machine (2026-09-29 and 2026-10-01), both times after Ice restarted
+    /// with the bar already crowded: macOS folds what does not fit beside the notch, concealing
+    /// frees the room again, and the fold is not reconsidered — the "«" goes away with the items
+    /// still behind it. Measured against that live state: neither `Scripts/macos27/reflow-probe.swift`
+    /// nor restarting Ice unfolds them, while relaunching the application whose item is missing
+    /// does, at once.
+    private func checkStuckOverflow() async {
+        let items = await MenuBarItemProvider27.items()
+        guard let screen = NSScreen.screenWithActiveMenuBar, screen.hasNotch else {
+            isOverflowStuck = false
+            return
+        }
+        let displayBounds = CGDisplayBounds(screen.displayID)
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let frames = items
+            .filter { !concealedPIDs.contains($0.ownerPID) && $0.ownerPID != ownPID && displayBounds.intersects($0.bounds) }
+            .map(\.bounds)
+        let stuck = StuckOverflow27.isStuck(
+            visibleItemFrames: frames,
+            chevronFrame: MenuBarItemProvider27.overflowButtonFrame(),
+            notchSpan: StuckOverflow27.notchSpan(
+                displayBounds: displayBounds,
+                leftAreaWidth: screen.auxiliaryTopLeftArea?.width,
+                rightAreaWidth: screen.auxiliaryTopRightArea?.width
+            )
+        )
+        guard stuck != isOverflowStuck else {
+            return
+        }
+        isOverflowStuck = stuck
+        if stuck {
+            logger.notice("The notched bar looks stuck: items folded away with no overflow button")
+        } else {
+            logger.notice("The notched bar lays its items out again")
         }
     }
 
@@ -260,6 +307,58 @@ final class Concealer27 {
         Task { [weak self] in
             await self?.appState?.itemManager.cacheItemsRegardless()
         }
+    }
+
+    /// Writes the sections the bar still holds from before macOS 27 into the saved layout, once.
+    ///
+    /// Nothing recorded them before: an item's section was where it sat between Ice's dividers.
+    /// On 27 that order no longer means anything, and an application missing from the layout is
+    /// visible, so without this an upgrade left Ice hiding nothing until the whole layout was
+    /// rebuilt by hand — reported on jordanbaird/Ice#1006, and the likeliest reading of several
+    /// "Ice hides nothing on 27" issues.
+    ///
+    /// The bar is read once, the first time it can be: a user who has arranged a layout of their
+    /// own keeps it, and a bar whose order macOS 27 has already rearranged is left alone (see
+    /// ``SectionLayout27/seededLayout(items:hiddenControlItem:alwaysHiddenControlItem:)``).
+    func seedLayoutIfNeeded(items: [MenuBarItem]) {
+        guard
+            !Defaults.bool(forKey: .macOS27LayoutSeeded),
+            savedLayout.isEmpty,
+            !isConcealing,
+            let hiddenControlItem = items.first(where: { $0.tag == .hiddenControlItem })
+        else {
+            return
+        }
+        // Once the bar can be read, this runs whatever it says: a bar that says nothing is still
+        // an answer, and asking it again later would risk reading one Ice itself had concealed.
+        Defaults.set(true, forKey: .macOS27LayoutSeeded)
+        let alwaysHiddenControlItem = items.first { $0.tag == .alwaysHiddenControlItem }
+        let managed = items.compactMap { item -> (bundleID: String, bounds: CGRect)? in
+            guard
+                item.canBeHidden,
+                !item.isSystemClone,
+                !item.isControlItem,
+                let bundleID = item.sourceApplication?.bundleIdentifier
+            else {
+                return nil
+            }
+            return (bundleID, item.bounds)
+        }
+        guard let seeded = SectionLayout27.seededLayout(
+            items: managed,
+            hiddenControlItem: hiddenControlItem.bounds,
+            alwaysHiddenControlItem: alwaysHiddenControlItem?.bounds
+        ) else {
+            logger.notice("The bar's order says nothing about sections, so the macOS 27 layout stays empty")
+            return
+        }
+        Defaults.set(seeded.mapValues(\.rawValue), forKey: .macOS27Layout)
+        let described = seeded
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value.rawValue)" }
+            .joined(separator: " ")
+        logger.notice("Took the macOS 27 layout from the order on the bar: \(described, privacy: .public)")
+        update()
     }
 
     /// Builds the item cache from the saved layout rather than the order on the bar.
