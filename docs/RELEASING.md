@@ -55,6 +55,8 @@ reverted code. Never reuse or decrement a version number to do this.
 | 1.0.0 | `v1.0.0` | First notarized release, Sparkle auto-updates |
 | 1.0.1 | `v1.0.1` | Sparkle 2.9.5 — GHSA-g3hp-f6mg-559v, GHSA-hg88-v3cw-3qrh |
 | 1.1.0 | `v1.1.0` | macOS 27 support (hiding + Layout restored) |
+| 1.1.1 | `v1.1.1` | Fullscreen: re-apply concealment when the menu bar swaps |
+| 1.1.2 | `v1.1.2` | macOS 27.0.1: PR #995 updates (layout migration, system items); Sparkle 2.10.0 — GHSA-3x7w-j75x-ppq5, GHSA-4v99-qgq9-6pxp |
 
 ## Gotchas learned the hard way
 
@@ -68,4 +70,10 @@ reverted code. Never reuse or decrement a version number to do this.
   `Updater.app`) ship with upstream signatures and must be re-signed deepest-first
   or notarization returns `Invalid`.
 - **Dependency bumps from upstream PRs** can silently downgrade Sparkle. Always check
-  `Package.resolved` after resolving — Edward must stay at **2.9.5 or newer**.
+  `Package.resolved` after resolving — Edward must stay at **2.10.0 or newer**.
+- **Scanners don't see every Sparkle advisory.** Sparkle publishes some advisories only
+  on its own repository, not in the global GitHub Advisory Database, so Dependabot and
+  Trivy (Himiko) stay silent about them. 2.9.6's two HIGH fixes were missed this way.
+  Before each release, check
+  `gh api repos/sparkle-project/Sparkle/security-advisories` and the
+  [releases page](https://github.com/sparkle-project/Sparkle/releases) by hand.

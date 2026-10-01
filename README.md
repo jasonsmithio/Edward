@@ -131,8 +131,9 @@ Edward additionally incorporates community work, used under the GPL-3.0:
 - **macOS 26 XPC fix** — [Piotr Durlej](https://github.com/pdurlej/Ice), which lets the
   menu-bar-reading XPC service talk to ad-hoc / personally-signed builds.
 - **macOS 27 support** — [Yevhenii Rabenko](https://github.com/RabenkoYevhenii), from
-  [Ice PR #995](https://github.com/jordanbaird/Ice/pull/995). Edward 1.1.0 ports that work
-  (with Sparkle held at 2.9.5 and Edward-specific cache/logging identifiers); the design
+  [Ice PR #995](https://github.com/jordanbaird/Ice/pull/995). Edward ports that work
+  and its follow-ups (keeping Sparkle current rather than the PR's base version, with
+  Edward-specific cache/logging identifiers); the design
   and implementation of the macOS 27 menu bar provider, concealer, and section layout are
   theirs.
 
