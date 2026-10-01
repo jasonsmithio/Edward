@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Trivy's vulnerability DB. Restore and save are separate steps on purpose:
       # the combined `actions/cache` only saves when the job SUCCEEDS, and a scan
@@ -155,7 +155,7 @@ jobs:
       pull-requests: write # open or refresh the pull request
       id-token: write # keyless fetch of the private binary
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
