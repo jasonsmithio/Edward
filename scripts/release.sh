@@ -84,7 +84,9 @@ echo "==> Zipping $ZIP_NAME"
 zip_app "$APP" "$ZIP"
 
 echo "==> Notarizing (waits for Apple)"
-NOTARY_OUT="$(xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait 2>&1)"
+# `|| true`: under `set -e` a failing notarytool would end the script here, before its
+# output (e.g. Apple's 403 for an unsigned developer agreement) is printed below.
+NOTARY_OUT="$(xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait 2>&1)" || true
 echo "$NOTARY_OUT"
 case "$NOTARY_OUT" in
   *"status: Accepted"*) ;;
