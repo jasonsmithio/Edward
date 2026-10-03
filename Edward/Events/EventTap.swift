@@ -50,6 +50,9 @@ final class EventTap {
         let unretained: EventTap = Unmanaged.fromOpaque(refcon).takeUnretainedValue()
         return withExtendedLifetime(unretained) { tap in
             if type == .tapDisabledByUserInput || type == .tapDisabledByTimeout {
+                // While a tap is disabled events skip it, so a click it was holding can lose its
+                // other half. Recorded at notice level so it outlives the session.
+                EventTap.logger.notice(#"Event tap "\#(tap.label, privacy: .public)" was disabled by \#(type == .tapDisabledByTimeout ? "timeout" : "user input", privacy: .public); re-enabling"#)
                 tap.enable()
                 return nil
             }

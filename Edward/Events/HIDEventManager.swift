@@ -33,6 +33,10 @@ final class HIDEventManager: ObservableObject {
     /// swallowing an unrelated one later.
     private var heldBackReleaseUntil: ContinuousClock.Instant?
 
+    /// The event number of the press held back. A press and its release share one, so only
+    /// that release is held back — never the release of a click that was let through.
+    private var heldBackPressNumber: Int64?
+
 
 
     /// A Boolean value that indicates whether the manager is enabled.
@@ -133,6 +137,13 @@ final class HIDEventManager: ObservableObject {
     ) { [weak self] _, event in
         guard let self, isEnabled, let appState else {
             return event
+        }
+        // Every left click on the system waits here until the main thread is free, so a busy
+        // main thread delays them all. Recorded so a late click can be matched to what was
+        // keeping the thread busy.
+        let lag = (Int64(clock_gettime_nsec_np(CLOCK_UPTIME_RAW)) - Int64(event.timestamp)) / 1_000_000
+        if lag > 100 {
+            Self.bridgeLogger.notice("Click tap: \(event.type == .leftMouseDown ? "press" : "release", privacy: .public) reached the tap \(lag, privacy: .public) ms late")
         }
         if #available(macOS 27.0, *) {
             return handleSystemItemClick27(event, appState: appState)
@@ -407,9 +418,20 @@ extension HIDEventManager {
             // replayed click that carries both.
             guard let until = heldBackReleaseUntil, ContinuousClock.now < until else {
                 heldBackReleaseUntil = nil
+                heldBackPressNumber = nil
+                return event
+            }
+            // Only the held press's own release. Swallowing the release of a click that was let
+            // through leaves the window server believing the button is still down, and the next
+            // movement drags whatever is under the pointer — a window, text, a file.
+            let number = event.getIntegerValueField(.mouseEventNumber)
+            guard number == heldBackPressNumber else {
+                Self.bridgeLogger.notice("Click bridge: let through release #\(number, privacy: .public), not the held press's #\(self.heldBackPressNumber ?? -1, privacy: .public)")
                 return event
             }
             heldBackReleaseUntil = nil
+            heldBackPressNumber = nil
+            Self.bridgeLogger.notice("Click bridge: held back release #\(number, privacy: .public)")
             return nil
         }
         let concealer = appState.concealer27
@@ -482,6 +504,8 @@ extension HIDEventManager {
             Self.bridgeLogger.debug("Click bridge: lifted in \(released, privacy: .public) ms, click replayed")
         }
         heldBackReleaseUntil = .now + .seconds(1)
+        heldBackPressNumber = event.getIntegerValueField(.mouseEventNumber)
+        Self.bridgeLogger.notice("Click bridge: held back press #\(self.heldBackPressNumber ?? -1, privacy: .public)")
         return nil
     }
 
