@@ -36,7 +36,16 @@ final class Concealer27: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     /// Whether any application is meant to be concealed right now.
-    private(set) var isConcealing = false
+    private(set) var isConcealing = false {
+        didSet {
+            let isConcealing = isConcealing
+            Self.isConcealingSnapshot.withLock { $0 = isConcealing }
+        }
+    }
+
+    /// ``isConcealing``, for the click tap, which runs off the main thread so that a busy main
+    /// thread never holds up the system's clicks.
+    nonisolated static let isConcealingSnapshot = OSAllocatedUnfairLock(initialState: false)
 
     /// Process identifiers of the applications meant to be concealed right now.
     private(set) var concealedPIDs = Set<pid_t>()
